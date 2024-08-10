@@ -1,0 +1,159 @@
+---
+title: "Final Project"
+author: "Nabhit Arora, Aahan Anand"
+date: 'Date: 19th April, 2024'
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+geometry: left=0.5in,right=0.5in,top=0.5in,bottom=0.5in
+urlcolor: blue
+---
+
+```{r setupFiles, include = FALSE}
+# This template file is based off of a template created by Alex Hayes
+# https://github.com/alexpghayes/rmarkdown_homework_template
+
+# Setting Document Options
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+```
+
+```{r}
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(knitr)
+```
+
+# Introduction
+
+This project conducts a thorough investigation into the correlation between the qualifying positions of Formula 1 drivers and their final race outcomes across multiple races. The analysis seeks to ascertain the impact of qualifying positions on race performance and evaluate other contributing factors.
+
+# Guiding Question:
+Does the qualifying position significantly impact the final race results in Formula 1, and what other factors might influence race outcomes?
+
+# Data Access and Preparation
+
+```{r}
+# Load the datasets
+qualifying_data <- read_csv("/Users/nabhitarora/Desktop/STAT184/FinalProject/qualifying.csv")
+race_results <- read_csv("/Users/nabhitarora/Desktop/STAT184/FinalProject/results.csv", na = "\\N") %>%
+  mutate(
+    raceId = as.numeric(raceId),
+    driverId = as.numeric(driverId),
+    positionOrder = as.numeric(positionOrder),
+    statusId = as.numeric(statusId)  # Include status to account for DNFs etc.
+  )
+
+# Initial data inspection
+glimpse(qualifying_data)
+glimpse(race_results)
+```
+
+The first figure shows the output of the glimpse() function from the dplyr package for two datasets: qualifying_data and race_results.
+
+# Data Wrangling
+
+``` {r}
+# Clean and prepare qualifying data
+qualifying_data <- qualifying_data %>%
+  filter(!is.na(position) & position > 0) %>% # Ensure the 'position' is valid
+  mutate(quali_position = as.numeric(position)) # Rename and ensure 'position' from qualifying is numeric
+
+# Clean and prepare race results data, making sure to keep the 'grid' column
+race_results <- race_results %>%
+  mutate(grid = as.numeric(grid), # Ensure 'grid' is numeric
+         positionOrder = as.numeric(positionOrder)) # Ensure 'positionOrder' is numeric
+
+# Join datasets based on raceId and driverId
+full_data <- left_join(qualifying_data, race_results, by = c("raceId", "driverId"))
+
+# Prepare data for analysis
+analysis_data <- full_data %>%
+  group_by(raceId, driverId) %>%
+  summarise(
+    mean_quali_position = mean(quali_position, na.rm = TRUE), # Use 'quali_position' from qualifying data
+    mean_final_position = mean(positionOrder, na.rm = TRUE), # Use 'positionOrder' from race results data
+    status = first(statusId)
+  ) %>%
+  ungroup()
+
+```
+
+
+# Exploratory Data Analysis
+
+``` {r}
+# Explore data through various visualizations
+
+# Qualifying position vs Final race position scatter plot
+ggplot(analysis_data, aes(x = mean_quali_position, y = mean_final_position)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(title = "Scatter Plot of Qualifying vs Final Positions",
+       x = "Mean Qualifying Position", y = "Mean Final Race Position")
+
+# Boxplot to assess spread and outliers
+ggplot(analysis_data, aes(x = as.factor(status), y = mean_final_position)) +
+  geom_boxplot() +
+  labs(title = "Final Positions by Race Status",
+       x = "Race Status", y = "Mean Final Race Position")
+```
+# Scatter Plot of Qualifying vs Final Positions
+This scatter plot displays the relationship between mean qualifying positions and mean final race positions. Each dot represents an aggregation of these metrics, likely by driver and race.
+
+## Analysis:
+
+There is a clear trend showing that a lower mean qualifying position (closer to pole position) tends to correlate with a lower mean final position (closer to 1st place in the race), implying that drivers who start at the front tend to finish at the front.
+The linear model (blue line) reinforces this trend, as it has a positive slope, indicating a direct correlation between the qualifying and final positions.
+The density of points is greater towards the lower end of the graph, which may suggest that it is more common for drivers to remain at the front if they start at the front, whereas variability increases with poorer starting positions.
+
+# Boxplot: Final Positions by Race Status
+This boxplot categorizes the mean final race positions by the race status codes.
+
+## Analysis:
+
+Race status seems to have a wide range of influences on the final race positions, as indicated by the variability in the boxplots.
+Some status codes correspond to more spread-out final positions, suggesting these statuses (possibly indicating retirements, disqualifications, or other incidents) are more disruptive to a driver's finishing position.
+There is a noticeable trend where certain statuses lead to consistently lower or higher positions, but due to the categorical nature of the status code, further investigation into what each code represents is needed to draw precise conclusions.
+
+# Statistical Analysis
+``` {r}
+# Multiple regression analysis
+model <- lm(mean_final_position ~ mean_quali_position + status, data = analysis_data)
+summary(model)
+
+# Output a detailed summary table of model coefficients
+kable(tidy(model), caption = "Regression Analysis Summary")
+
+```
+# Regression Analysis Summary
+The regression output provides statistical details on the relationship between the average final position and both the average qualifying position and race status.
+
+## Analysis:
+
+The intercept coefficient is significant and positive, suggesting that the expected final position without considering qualifying position and status is approximately 4.5.
+The coefficient for mean_quali_position is also significant and indicates that for each unit decrease in qualifying position (towards pole position), the final race position is expected to improve by about half a place, holding status constant.
+The status variable's positive coefficient implies that as the status code increases, which may be associated with less ideal conditions or occurrences, the final race position worsens slightly.
+The R-squared value of 0.4027 suggests that approximately 40% of the variability in the final race position can be explained by the model, which is a substantial but not complete explanation, indicating other factors also play significant roles.
+
+# Observations and Conclusion
+The statistical analysis, including a multiple regression model, indicates that qualifying position is a significant predictor of final race outcomes, adjusted for factors like race status (e.g., Did Not Finish due to mechanical failure). Better qualifying positions are generally associated with better final race placements, emphasizing the strategic importance of qualifications in Formula 1 racing.
+
+# Challenges and Technical Issues
+Data type inconsistencies and missing values were prevalent, requiring careful handling during the preprocessing stages. The mutate() and filter() functions from dplyr were instrumental in managing these issues efficiently.
+
+# Additional Insights
+Further research could incorporate more external variables such as weather conditions, pit stop strategy, and team dynamics to broaden understanding of their impact on race results.
+
+# Conclusion
+The analysis confirms the critical role of qualifying positions in Formula 1 races, with substantial effects on the race outcomes. Teams and drivers should focus on optimizing qualifying strategies to enhance their competitive advantage.
+
